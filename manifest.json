@@ -1,0 +1,72 @@
+{
+    "manifest_version": 3,
+    "name": "OmniPanel",
+    "version": "1.0",
+    "description": "Access Gemini, ChatGPT, Claude, DeepSeek, and Grok in your side panel.",
+    "permissions": [
+        "sidePanel",
+        "declarativeNetRequest",
+        "declarativeNetRequestFeedback",
+        "storage",
+        "scripting",
+        "activeTab"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "side_panel": {
+        "default_path": "sidepanel.html"
+    },
+    "action": {
+        "default_title": "Open Multi-AI Panel"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://*.google.com/*",
+                "*://*.gemini.google.com/*",
+                "*://*.openai.com/*",
+                "*://*.chatgpt.com/*",
+                "*://*.anthropic.com/*",
+                "*://*.claude.ai/*",
+                "*://*.deepseek.com/*",
+                "*://*.grok.com/*",
+                "*://*.x.com/*"
+            ],
+            "js": [
+                "injector.js"
+            ],
+            "all_frames": true,
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "*://*.claude.ai/*",
+                "*://*.anthropic.com/*"
+            ],
+            "js": [
+                "antidetect.js"
+            ],
+            "run_at": "document_start",
+            "world": "MAIN"
+        }
+    ],
+    "declarative_net_request": {
+        "rule_resources": [
+            {
+                "id": "ruleset_1",
+                "enabled": true,
+                "path": "rules.json"
+            }
+        ]
+    },
+    "icons": {
+        "128": "image.png"
+    },
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; frame-src *; connect-src * data: blob:; style-src 'self' 'unsafe-inline'; img-src * data: blob:;"
+    }
+}

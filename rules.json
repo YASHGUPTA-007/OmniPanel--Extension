@@ -1,0 +1,131 @@
+[
+    {
+        "id": 1,
+        "priority": 1,
+        "action": {
+            "type": "modifyHeaders",
+            "responseHeaders": [
+                {
+                    "header": "x-frame-options",
+                    "operation": "remove"
+                },
+                {
+                    "header": "content-security-policy",
+                    "operation": "remove"
+                },
+                {
+                    "header": "cross-origin-embedder-policy",
+                    "operation": "remove"
+                },
+                {
+                    "header": "cross-origin-opener-policy",
+                    "operation": "remove"
+                },
+                {
+                    "header": "cross-origin-resource-policy",
+                    "operation": "remove"
+                },
+                {
+                    "header": "permissions-policy",
+                    "operation": "remove"
+                },
+                {
+                    "header": "feature-policy",
+                    "operation": "remove"
+                }
+            ]
+        },
+        "condition": {
+            "urlFilter": "*",
+            "resourceTypes": [
+                "main_frame",
+                "sub_frame",
+                "stylesheet",
+                "script",
+                "image",
+                "font",
+                "object",
+                "xmlhttprequest",
+                "ping",
+                "csp_report",
+                "media",
+                "websocket",
+                "other"
+            ]
+        }
+    },
+    {
+        "id": 2,
+        "priority": 2,
+        "action": {
+            "type": "modifyHeaders",
+            "requestHeaders": [
+                {
+                    "header": "Origin",
+                    "operation": "set",
+                    "value": "https://claude.ai"
+                },
+                {
+                    "header": "Referer",
+                    "operation": "set",
+                    "value": "https://claude.ai/"
+                }
+            ],
+            "responseHeaders": [
+                {
+                    "header": "Permissions-Policy",
+                    "operation": "set",
+                    "value": "microphone=*"
+                }
+            ]
+        },
+        "condition": {
+            "urlFilter": "||claude.ai",
+            "resourceTypes": [
+                "xmlhttprequest",
+                "websocket",
+                "media",
+                "other",
+                "sub_frame",
+                "main_frame"
+            ]
+        }
+    },
+    {
+        "id": 3,
+        "priority": 2,
+        "action": {
+            "type": "modifyHeaders",
+            "requestHeaders": [
+                {
+                    "header": "Origin",
+                    "operation": "set",
+                    "value": "https://anthropic.com"
+                },
+                {
+                    "header": "Referer",
+                    "operation": "set",
+                    "value": "https://anthropic.com/"
+                }
+            ],
+            "responseHeaders": [
+                {
+                    "header": "Permissions-Policy",
+                    "operation": "set",
+                    "value": "microphone=*"
+                }
+            ]
+        },
+        "condition": {
+            "urlFilter": "||anthropic.com",
+            "resourceTypes": [
+                "xmlhttprequest",
+                "websocket",
+                "media",
+                "other",
+                "sub_frame",
+                "main_frame"
+            ]
+        }
+    }
+]
