@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         frame = newFrame;
 
         // Re-apply zoom to the new iframe
-        if (typeof applyZoom === 'function') applyZoom(currentZoom);
+        applyZoom(currentZoom);
 
         if (targetUrl && targetUrl.includes('claude.ai')) {
             showToast('⚠️ Voice mode is unavailable for Claude in OmniPanel.', 4000);
