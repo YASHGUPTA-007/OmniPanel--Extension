@@ -1,21 +1,143 @@
 // Run in MAIN world on Claude pages
-// Instead of intercepting clicks, observe the DOM for the error message
-// and disable the voice button entirely
+// Handles: sidebar visibility, voice mode limitations
 (function () {
     'use strict';
 
+    // === VIEWPORT SPOOF ===
+    // Claude hides its sidebar on narrow viewports via JS checks (React hooks).
+    // Since this runs at document_start in MAIN world, it executes BEFORE Claude's
+    // React hydrates, tricking it into thinking the viewport is desktop-width.
+    const SPOOFED_WIDTH = 1400;
+
+    try {
+        Object.defineProperty(window, 'innerWidth', {
+            get: () => SPOOFED_WIDTH,
+            configurable: true
+        });
+        Object.defineProperty(document.documentElement, 'clientWidth', {
+            get: () => SPOOFED_WIDTH,
+            configurable: true
+        });
+
+        // Override matchMedia for JS-based responsive checks (e.g., useMediaQuery hooks)
+        const originalMatchMedia = window.matchMedia.bind(window);
+        window.matchMedia = function (query) {
+            // For max-width queries below our spoofed width, make them NOT match
+            let modified = query.replace(/\(max-width:\s*(\d+)px\)/g, (match, px) => {
+                return parseInt(px) < SPOOFED_WIDTH ? '(max-width: 0px)' : match;
+            });
+            // For min-width queries at or below our spoofed width, make them match
+            modified = modified.replace(/\(min-width:\s*(\d+)px\)/g, (match, px) => {
+                return parseInt(px) <= SPOOFED_WIDTH ? '(min-width: 0px)' : match;
+            });
+            return originalMatchMedia(modified);
+        };
+    } catch (e) {
+        // If overrides fail, continue gracefully
+    }
+
+    // === SIDEBAR CSS FIX ===
+    // Even with JS spoofing, CSS media queries still see the real viewport width.
+    // Inject a <style> tag to force the sidebar to render as a fixed overlay.
+    function injectSidebarCSS() {
+        const style = document.createElement('style');
+        style.id = 'omni-claude-sidebar-fix';
+        style.textContent = `
+            /* Force Claude sidebar to show as an overlay */
+            nav,
+            [data-testid*="sidebar"],
+            [data-testid*="nav"],
+            aside {
+                position: fixed !important;
+                left: 0 !important;
+                top: 0 !important;
+                height: 100vh !important;
+                z-index: 99990 !important;
+                transform: translateX(0) !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                overflow-y: auto !important;
+                max-width: 85vw !important;
+            }
+
+            /* When sidebar is hidden via toggle, slide it off-screen */
+            nav.omni-hidden,
+            aside.omni-hidden {
+                transform: translateX(-100%) !important;
+                transition: transform 0.2s ease !important;
+            }
+
+            nav:not(.omni-hidden),
+            aside:not(.omni-hidden) {
+                transition: transform 0.2s ease !important;
+            }
+        `;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    // === FLOATING RECENTS BUTTON ===
+    // As a reliable fallback, add a floating button to navigate to Claude's recent chats
+    function addRecentsButton() {
+        if (document.getElementById('omni-recents-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'omni-recents-btn';
+        btn.innerHTML = '☰';
+        btn.title = 'View recent chats';
+        btn.style.cssText = `
+            position: fixed;
+            bottom: 90px;
+            left: 12px;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: 1px solid #3a3a3a;
+            background: #1e1e1e;
+            color: #e5e5e5;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 999999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        `;
+
+        btn.addEventListener('mouseenter', () => {
+            btn.style.background = '#333';
+            btn.style.transform = 'scale(1.1)';
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.style.background = '#1e1e1e';
+            btn.style.transform = 'scale(1)';
+        });
+
+        btn.addEventListener('click', () => {
+            // Toggle sidebar if it exists, otherwise navigate to recents
+            const sidebar = document.querySelector('nav') || document.querySelector('aside');
+            if (sidebar) {
+                sidebar.classList.toggle('omni-hidden');
+            } else {
+                // Fallback: navigate to recents page
+                window.location.href = '/recents';
+            }
+        });
+
+        document.body.appendChild(btn);
+    }
+
+    // === VOICE MODE HANDLING ===
     const NOTICE_TEXT = '🎤 Voice mode is unavailable in OmniPanel. Open Claude in a new tab to use voice.';
 
-    // Replace the "Voice mode disconnected" error with our notice
     function handleMutation(mutations) {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
                 if (node.nodeType !== 1) continue;
                 const text = node.textContent || '';
 
-                // Detect Claude's voice error message
                 if (text.includes('Voice mode disconnected') || text.includes('voice mode')) {
-                    // Replace the error content
                     const el = node.querySelector ? (node.querySelector('[class*="alert"], [class*="toast"], [class*="error"], [role="alert"]') || node) : node;
                     if (el && el.textContent.includes('Voice mode disconnected')) {
                         el.textContent = NOTICE_TEXT;
@@ -24,16 +146,13 @@
                 }
             }
         }
-
-        // Continuously try to find and mark voice buttons
         disableVoiceButtons();
     }
 
     function disableVoiceButtons() {
-        // Find all buttons and check for voice/mic related ones
         const buttons = document.querySelectorAll('button');
         buttons.forEach(btn => {
-            if (btn.dataset.multiAiHandled) return;
+            if (btn.dataset.omniHandled) return;
 
             const label = (btn.getAttribute('aria-label') || '').toLowerCase();
             const title = (btn.getAttribute('title') || '').toLowerCase();
@@ -43,20 +162,17 @@
             const isVoice = label.includes('voice') || label.includes('microphone') ||
                 title.includes('voice') || title.includes('microphone') ||
                 testId.includes('voice') || testId.includes('mic') ||
-                // Check for mic SVG icon inside the button
                 (btn.querySelector('svg') && text.trim() === '' && isMicSvg(btn));
 
             if (isVoice) {
-                btn.dataset.multiAiHandled = 'true';
+                btn.dataset.omniHandled = 'true';
                 btn.addEventListener('click', function (e) {
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     showNotice();
                 }, true);
-
-                // Add a small indicator
-                btn.title = 'Voice unavailable in side panel';
+                btn.title = 'Voice unavailable in OmniPanel';
             }
         });
     }
@@ -65,7 +181,6 @@
         const paths = btn.querySelectorAll('svg path');
         for (const p of paths) {
             const d = p.getAttribute('d') || '';
-            // Common microphone SVG path patterns
             if (d.includes('M12 14') || d.includes('M12,14') ||
                 d.includes('M19 11') || d.includes('M19,11') ||
                 d.includes('m12') || d.includes('microphone')) {
@@ -76,28 +191,30 @@
     }
 
     function showNotice() {
-        // Remove existing
-        const existing = document.getElementById('multi-ai-voice-notice');
+        const existing = document.getElementById('omni-voice-notice');
         if (existing) existing.remove();
 
         const banner = document.createElement('div');
-        banner.id = 'multi-ai-voice-notice';
+        banner.id = 'omni-voice-notice';
         banner.style.cssText = `
             position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-            background: #1e1e2e; color: #ffa500; padding: 12px 20px;
-            border-radius: 10px; font-size: 13px; z-index: 999999;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            background: #1e1e1e; color: #ffa500; padding: 12px 20px;
+            border-radius: 8px; font-size: 13px; z-index: 999999;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4); border: 1px solid #333;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             cursor: pointer; text-align: center; max-width: 90%;
         `;
         banner.textContent = NOTICE_TEXT;
         document.body.appendChild(banner);
-
-        setTimeout(() => { banner.remove(); }, 4000);
+        setTimeout(() => banner.remove(), 4000);
         banner.addEventListener('click', () => banner.remove());
     }
 
-    // Start observing
+    // === INITIALIZATION ===
+
+    // Inject CSS immediately (before page renders)
+    injectSidebarCSS();
+
     const observer = new MutationObserver(handleMutation);
 
     function startObserving() {
@@ -106,6 +223,7 @@
             subtree: true
         });
         disableVoiceButtons();
+        addRecentsButton();
     }
 
     if (document.body) {

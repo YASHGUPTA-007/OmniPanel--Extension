@@ -1,10 +1,11 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const selector = document.getElementById('ai-selector');
-    const frame = document.getElementById('ai-frame');
+    let frame = document.getElementById('ai-frame');
     const btnUrl = document.getElementById('inject-url');
     const btnScreenshot = document.getElementById('inject-screenshot');
     const btnMic = document.getElementById('enable-mic');
     const toast = document.getElementById('toast');
+    const frameContainer = document.querySelector('main');
 
     // State
     const DEFAULT_URLS = {
@@ -23,43 +24,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         'anthropic.com': 'Claude',
         'chat.deepseek.com': 'DeepSeek',
         'grok.com': 'Grok',
-        'x.com': 'Grok' // Grok is hosted on x.com sometimes
+        'x.com': 'Grok'
     };
 
     let sessionState = {
-        sessions: {}, // { "Gemini": "https://...", "ChatGPT": "https://..." }
+        sessions: {},
         lastProvider: 'Gemini'
     };
 
+    // --- Zoom ---
+
+    const ZOOM_STEP = 0.1;
+    const ZOOM_MIN = 0.3;
+    const ZOOM_MAX = 1.5;
+    let currentZoom = 1.0;
+
+    function applyZoom(level) {
+        currentZoom = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level)) * 100) / 100;
+        const currentFrame = document.getElementById('ai-frame');
+        if (currentFrame) {
+            currentFrame.style.width = (100 / currentZoom) + '%';
+            currentFrame.style.height = (100 / currentZoom) + '%';
+            currentFrame.style.transform = `scale(${currentZoom})`;
+            currentFrame.style.transformOrigin = 'top left';
+        }
+        chrome.storage.local.set({ omniZoomLevel: currentZoom });
+    }
+
     // --- Initialization ---
 
-    // Load saved state
-    const saved = await chrome.storage.local.get(['omniSessionState']);
+    const saved = await chrome.storage.local.get(['omniSessionState', 'omniZoomLevel']);
     if (saved.omniSessionState) {
         sessionState = { ...sessionState, ...saved.omniSessionState };
     }
+    if (saved.omniZoomLevel) {
+        currentZoom = saved.omniZoomLevel;
+    }
 
-    // Set initial dropdown value
     const initialProvider = sessionState.lastProvider || 'Gemini';
-    
-    // Handle case where saved provider might not be in the dropdown options (backward compatibility)
-    // We iterate options to find a match or default to first
-    let optionExists = false;
+
     for (let i = 0; i < selector.options.length; i++) {
-        // Check if option text matches strict provider name, 
-        // or if value matches (legacy was value=URL)
         if (selector.options[i].text === initialProvider) {
             selector.selectedIndex = i;
-            optionExists = true;
             break;
         }
     }
-    
-    // If we couldn't find the provider by name, fallback to value check or first option
-    // Note: Our HTML values are URLs, so this is a bit tricky. 
-    // We should probably rely on the *Text* of the option as the unique key.
-    
-    // Restore session
+
+    // Restore session (replace iframe on first load too for consistency)
     restoreSession(initialProvider);
 
 
@@ -67,12 +78,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     selector.addEventListener('change', (e) => {
         const selectedOption = e.target.options[e.target.selectedIndex];
-        const providerName = selectedOption.text; // "Gemini", "ChatGPT" ...
-        
+        const providerName = selectedOption.text;
         updateProvider(providerName);
     });
 
-    // Listen for URL updates from the iframe (via content script)
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.action === 'SESSION_URL_UPDATE' && message.url) {
             handleSessionUpdate(message.url);
@@ -82,31 +91,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- Core Logic ---
 
-    function restoreSession(providerName) {
-        let targetUrl = sessionState.sessions[providerName];
-
-        // If no saved session, get default from dropdown value
-        if (!targetUrl) {
-            // Find option with this text
-            for (let opt of selector.options) {
-                if (opt.text === providerName) {
-                    targetUrl = opt.value;
-                    break;
-                }
-            }
+    function getDefaultUrl(providerName) {
+        for (let opt of selector.options) {
+            if (opt.text === providerName) return opt.value;
         }
-        
-        // Fallback
+        return DEFAULT_URLS[providerName];
+    }
+
+    function restoreSession(providerName) {
+        let targetUrl = sessionState.sessions[providerName] || getDefaultUrl(providerName);
         if (!targetUrl) targetUrl = DEFAULT_URLS[providerName];
 
         console.log(`[OmniPanel] Restoring ${providerName} -> ${targetUrl}`);
-        
-        // Only reload if different
-        if (frame.src !== targetUrl) {
-            frame.src = targetUrl;
-        }
 
-        // Voice mode check
+        // ALWAYS create a fresh iframe to avoid cross-origin stale state
+        const newFrame = document.createElement('iframe');
+        newFrame.id = 'ai-frame';
+        newFrame.setAttribute('frameborder', '0');
+        newFrame.setAttribute('allow', 'microphone *; camera *; clipboard-write; clipboard-read; fullscreen; display-capture');
+        newFrame.src = targetUrl;
+
+        // Replace old iframe
+        if (frame && frame.parentNode) {
+            frame.parentNode.replaceChild(newFrame, frame);
+        } else {
+            frameContainer.prepend(newFrame);
+        }
+        frame = newFrame;
+
+        // Re-apply zoom to the new iframe
+        if (typeof applyZoom === 'function') applyZoom(currentZoom);
+
         if (targetUrl && targetUrl.includes('claude.ai')) {
             showToast('⚠️ Voice mode is unavailable for Claude in OmniPanel.', 4000);
         }
@@ -133,12 +148,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (provider) {
-                // If we are currently viewing this provider, update the session URL
-                // Verify we aren't accidentally saving a redirect or login page if we can avoid it (optional refinement)
-                sessionState.sessions[provider] = url;
+                const defaultUrl = getDefaultUrl(provider) || DEFAULT_URLS[provider];
                 
-                // If this update matches our current active provider, save state
-                // This prevents background updates from inactive tabs if we ever had multiple (unlikely here)
+                // Only save if URL is different from the default (user navigated somewhere specific)
+                // Skip saving auth/redirect pages
+                if (url !== defaultUrl && 
+                    !url.includes('accounts.google.com') && 
+                    !url.includes('/signin') &&
+                    !url.includes('/login') &&
+                    !url.includes('/auth')) {
+                    sessionState.sessions[provider] = url;
+                } else {
+                    // If user is back at default, clear saved session so default loads next time
+                    delete sessionState.sessions[provider];
+                }
+
                 if (provider === sessionState.lastProvider) {
                     saveState();
                 }
@@ -214,7 +238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateMicBtn(permissionStatus.state);
             permissionStatus.onchange = () => updateMicBtn(permissionStatus.state);
         } catch (err) {
-            btnMic.style.display = 'flex'; // Fallback
+            btnMic.style.display = 'flex';
         }
     }
 
@@ -223,4 +247,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     checkMicPermission();
+
+
+    // --- Zoom Controls ---
+
+    const btnZoomIn = document.getElementById('zoom-in');
+    const btnZoomOut = document.getElementById('zoom-out');
+
+    function zoomIn() {
+        applyZoom(currentZoom + ZOOM_STEP);
+        showToast(`Zoom ${Math.round(currentZoom * 100)}%`);
+    }
+
+    function zoomOut() {
+        applyZoom(currentZoom - ZOOM_STEP);
+        showToast(`Zoom ${Math.round(currentZoom * 100)}%`);
+    }
+
+    btnZoomIn.addEventListener('click', zoomIn);
+    btnZoomOut.addEventListener('click', zoomOut);
+
+    // Keyboard shortcuts: Ctrl+= (zoom in), Ctrl+- (zoom out), Ctrl+0 (reset)
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === '=' || e.key === '+') {
+                e.preventDefault();
+                zoomIn();
+            } else if (e.key === '-') {
+                e.preventDefault();
+                zoomOut();
+            } else if (e.key === '0') {
+                e.preventDefault();
+                applyZoom(1.0);
+                showToast('Zoom Reset 100%');
+            }
+        }
+    });
 });
