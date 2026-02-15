@@ -12,45 +12,56 @@
   <div class="container">
     <header>
       <div class="logo-area">
-        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
           <rect x="3" y="2" width="18" height="20" rx="6" stroke="#94a3b8" stroke-width="2"/>
           <rect x="6" y="5" width="12" height="14" rx="3" stroke="#cbd5e1" stroke-opacity="0.7" stroke-width="1.5"/>
           <rect x="9" y="8" width="6" height="8" rx="1" stroke="#e2e8f0" stroke-opacity="0.4" stroke-width="1"/>
         </svg>
         <h1>OmniPanel</h1>
       </div>
-      <div class="selector-area">
-        <select id="ai-selector">
-          <option value="https://gemini.google.com/app">Gemini</option>
-          <option value="https://chatgpt.com">ChatGPT</option>
-          <option value="https://claude.ai/new">Claude</option>
-          <option value="https://chat.deepseek.com/">DeepSeek</option>
-          <option value="https://grok.com">Grok</option>
-        </select>
-        <button id="inject-url" title="Copy URL">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+      <nav class="ai-nav" id="ai-nav">
+        <button class="ai-btn active" data-provider="Gemini" data-url="https://gemini.google.com/app" title="Gemini">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+            <path d="M12 2C12 2 14.5 8.5 17 11C19.5 13.5 22 12 22 12C22 12 19.5 14.5 17 17C14.5 19.5 12 22 12 22C12 22 9.5 19.5 7 17C4.5 14.5 2 12 2 12C2 12 4.5 13.5 7 11C9.5 8.5 12 2 12 2Z" fill="currentColor" opacity="0.9"/>
+          </svg>
         </button>
-        <button id="inject-screenshot" title="Copy Screenshot">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        <button class="ai-btn" data-provider="ChatGPT" data-url="https://chatgpt.com" title="ChatGPT">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.998 5.998 0 0 0-3.998 2.9 6.05 6.05 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/>
+          </svg>
         </button>
+        <button class="ai-btn" data-provider="Claude" data-url="https://claude.ai/new" title="Claude">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M4.709 15.955l4.397-2.006-.429-1.12-4.973 1.238.144.706c.108.411.372.772.636 1.074l.225.108zM6.882 9.77l3.652 3.203.757-.862-2.726-3.894-.597.245a3.95 3.95 0 0 0-.962.861L6.882 9.77zm5.198-3.596l.677 4.788 1.14-.106.32-5.06-.576-.282c-.384-.155-.83-.22-1.22-.22l-.34.88zm4.936 2.238L14.18 12.94l.9.71 4.067-2.928-.266-.555a3.96 3.96 0 0 0-.773-.954l-1.088.199zm1.014 5.73l-4.618-1.378-.362 1.106 3.958 3.17.487-.37c.335-.287.56-.639.69-.98l-.155-.547zM12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z"/>
+          </svg>
+        </button>
+        <button class="ai-btn" data-provider="DeepSeek" data-url="https://chat.deepseek.com/" title="DeepSeek">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3.5c1.3 0 2.4.5 3.2 1.3.5.5.8 1 1 1.6.1.3-.1.5-.4.4-.6-.2-1.3-.3-2-.3-2.8 0-5.2 1.8-6.1 4.3-.1.3-.4.3-.5 0a6.5 6.5 0 0 1 4.8-7.3zm-2.5 6c.7 0 1.3.6 1.3 1.3s-.6 1.3-1.3 1.3-1.3-.6-1.3-1.3.6-1.3 1.3-1.3zm5 0c.7 0 1.3.6 1.3 1.3s-.6 1.3-1.3 1.3-1.3-.6-1.3-1.3.6-1.3 1.3-1.3zm-6.8 4.2c.1-.2.4-.2.5 0 .9 1.6 2.3 2.5 3.8 2.5s2.9-.9 3.8-2.5c.1-.2.4-.2.5 0 .1.2 0 .5-.1.7-1.1 1.8-2.7 2.8-4.2 2.8s-3.1-1-4.2-2.8c-.2-.2-.2-.5-.1-.7z"/>
+          </svg>
+        </button>
+        <button class="ai-btn" data-provider="Grok" data-url="https://grok.com" title="Grok">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M13.982 10.622L20.54 3h-1.554l-5.693 6.618L8.745 3H3.5l6.876 10.007L3.5 21h1.554l6.012-6.989L15.868 21H21.1l-7.118-10.378zm-2.128 2.474l-.697-.997L5.654 4.15h2.386l4.474 6.4.697.996 5.815 8.318h-2.387l-4.745-6.788z"/>
+          </svg>
+        </button>
+      </nav>
+      <div class="zoom-controls">
         <button id="zoom-out" title="Zoom Out (Ctrl −)">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="12" x2="18" y2="12"></line></svg>
         </button>
         <button id="zoom-in" title="Zoom In (Ctrl +)">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
-        </button>
-        <button id="enable-mic" title="Enable Microphone Access" style="display: none;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"></line><line x1="6" y1="12" x2="18" y2="12"></line></svg>
         </button>
       </div>
     </header>
     <main>
-      <iframe id="ai-frame" src="https://gemini.google.com/app" frameborder="0"
-        allow="microphone *; camera *; clipboard-write; clipboard-read; fullscreen; display-capture"></iframe>
+      <iframe id="ai-frame" class="ai-frame" src="https://gemini.google.com/app" frameborder="0"
+        allow="microphone; camera; clipboard-write; clipboard-read; fullscreen; display-capture"></iframe>
       <div id="toast" class="toast hidden">Action Successful</div>
     </main>
   </div>
-  <script src="sidepanel.js?v=2"></script>
+  <script src="sidepanel.js?v=4"></script>
 </body>
 
 </html>

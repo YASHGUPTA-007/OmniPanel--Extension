@@ -1,22 +1,11 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    const selector = document.getElementById('ai-selector');
-    let frame = document.getElementById('ai-frame');
-    const btnUrl = document.getElementById('inject-url');
-    const btnScreenshot = document.getElementById('inject-screenshot');
-    const btnMic = document.getElementById('enable-mic');
-    const toast = document.getElementById('toast');
+    const nav = document.getElementById('ai-nav');
+    const aiButtons = nav.querySelectorAll('.ai-btn');
     const frameContainer = document.querySelector('main');
+    const toast = document.getElementById('toast');
 
-    // State
-    const DEFAULT_URLS = {
-        'Gemini': 'https://gemini.google.com/app',
-        'ChatGPT': 'https://chatgpt.com',
-        'Claude': 'https://claude.ai/new',
-        'DeepSeek': 'https://chat.deepseek.com/',
-        'Grok': 'https://grok.com'
-    };
-
-    // Mapping domains to provider names for session tracking
+    // Provider config
+    const DEFAULT_URLS = {};
     const DOMAIN_TO_PROVIDER = {
         'gemini.google.com': 'Gemini',
         'chatgpt.com': 'ChatGPT',
@@ -27,10 +16,61 @@ document.addEventListener('DOMContentLoaded', async () => {
         'x.com': 'Grok'
     };
 
+    // Build default URLs from HTML data attributes
+    aiButtons.forEach(btn => {
+        DEFAULT_URLS[btn.dataset.provider] = btn.dataset.url;
+    });
+
     let sessionState = {
         sessions: {},
         lastProvider: 'Gemini'
     };
+
+    // --- Iframe Pool (show/hide instead of destroy/create) ---
+    const iframes = {};  // provider -> iframe element
+
+    // Register the initial HTML iframe as Gemini's
+    const initialFrame = document.getElementById('ai-frame');
+    initialFrame.dataset.provider = 'Gemini';
+    iframes['Gemini'] = initialFrame;
+
+    function getOrCreateIframe(providerName) {
+        if (iframes[providerName]) {
+            return iframes[providerName];
+        }
+
+        const url = sessionState.sessions[providerName] || DEFAULT_URLS[providerName];
+        if (!url) return null;
+
+        const newFrame = document.createElement('iframe');
+        newFrame.className = 'ai-frame';
+        newFrame.dataset.provider = providerName;
+        newFrame.setAttribute('frameborder', '0');
+        newFrame.setAttribute('allow', 'microphone; camera; clipboard-write; clipboard-read; fullscreen; display-capture');
+        newFrame.src = url;
+        newFrame.style.display = 'none';  // hidden by default
+        frameContainer.insertBefore(newFrame, toast);
+
+        iframes[providerName] = newFrame;
+        return newFrame;
+    }
+
+    function showProvider(providerName) {
+        // Hide all iframes
+        Object.values(iframes).forEach(f => {
+            f.style.display = 'none';
+        });
+
+        // Show (or create) the target iframe
+        const targetFrame = getOrCreateIframe(providerName);
+        if (targetFrame) {
+            targetFrame.style.display = 'block';
+        }
+
+        if (DEFAULT_URLS[providerName]?.includes('claude.ai')) {
+            showToast('⚠️ Voice mode unavailable for Claude', 3000);
+        }
+    }
 
     // --- Zoom ---
 
@@ -41,45 +81,43 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function applyZoom(level) {
         currentZoom = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level)) * 100) / 100;
-        const currentFrame = document.getElementById('ai-frame');
-        if (currentFrame) {
-            currentFrame.style.width = (100 / currentZoom) + '%';
-            currentFrame.style.height = (100 / currentZoom) + '%';
-            currentFrame.style.transform = `scale(${currentZoom})`;
-            currentFrame.style.transformOrigin = 'top left';
-        }
+        // Apply to ALL iframes so zoom is consistent
+        Object.values(iframes).forEach(f => {
+            f.style.width = (100 / currentZoom) + '%';
+            f.style.height = (100 / currentZoom) + '%';
+            f.style.transform = `scale(${currentZoom})`;
+            f.style.transformOrigin = 'top left';
+        });
         chrome.storage.local.set({ omniZoomLevel: currentZoom });
     }
 
     // --- Initialization ---
 
-    const saved = await chrome.storage.local.get(['omniSessionState', 'omniZoomLevel']);
-    if (saved.omniSessionState) {
-        sessionState = { ...sessionState, ...saved.omniSessionState };
+    const STORAGE_KEY = 'omniState_v2';
+    chrome.storage.local.remove(['omniSessionState', 'lastAiUrl']);
+
+    const saved = await chrome.storage.local.get([STORAGE_KEY, 'omniZoomLevel']);
+    if (saved[STORAGE_KEY]) {
+        sessionState = { ...sessionState, ...saved[STORAGE_KEY] };
     }
-    if (saved.omniZoomLevel) {
+    if (saved.omniZoomLevel && saved.omniZoomLevel !== 1) {
         currentZoom = saved.omniZoomLevel;
+        applyZoom(currentZoom);
     }
 
     const initialProvider = sessionState.lastProvider || 'Gemini';
-
-    for (let i = 0; i < selector.options.length; i++) {
-        if (selector.options[i].text === initialProvider) {
-            selector.selectedIndex = i;
-            break;
-        }
-    }
-
-    // Restore session (replace iframe on first load too for consistency)
-    restoreSession(initialProvider);
+    setActiveButton(initialProvider);
+    showProvider(initialProvider);
 
 
     // --- Event Listeners ---
 
-    selector.addEventListener('change', (e) => {
-        const selectedOption = e.target.options[e.target.selectedIndex];
-        const providerName = selectedOption.text;
-        updateProvider(providerName);
+    aiButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const provider = btn.dataset.provider;
+            if (provider === sessionState.lastProvider) return;
+            updateProvider(provider);
+        });
     });
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -88,57 +126,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Keyboard zoom
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === '=' || e.key === '+') {
+                e.preventDefault();
+                applyZoom(currentZoom + ZOOM_STEP);
+                showToast(`Zoom ${Math.round(currentZoom * 100)}%`);
+            } else if (e.key === '-') {
+                e.preventDefault();
+                applyZoom(currentZoom - ZOOM_STEP);
+                showToast(`Zoom ${Math.round(currentZoom * 100)}%`);
+            } else if (e.key === '0') {
+                e.preventDefault();
+                applyZoom(1.0);
+                showToast('Zoom Reset');
+            }
+        }
+    });
+
+    document.getElementById('zoom-in').addEventListener('click', () => {
+        applyZoom(currentZoom + ZOOM_STEP);
+        showToast(`Zoom ${Math.round(currentZoom * 100)}%`);
+    });
+    document.getElementById('zoom-out').addEventListener('click', () => {
+        applyZoom(currentZoom - ZOOM_STEP);
+        showToast(`Zoom ${Math.round(currentZoom * 100)}%`);
+    });
+
 
     // --- Core Logic ---
 
-    function getDefaultUrl(providerName) {
-        for (let opt of selector.options) {
-            if (opt.text === providerName) return opt.value;
-        }
-        return DEFAULT_URLS[providerName];
-    }
-
-    function restoreSession(providerName) {
-        let targetUrl = sessionState.sessions[providerName] || getDefaultUrl(providerName);
-        if (!targetUrl) targetUrl = DEFAULT_URLS[providerName];
-
-        console.log(`[OmniPanel] Restoring ${providerName} -> ${targetUrl}`);
-
-        // ALWAYS create a fresh iframe to avoid cross-origin stale state
-        const newFrame = document.createElement('iframe');
-        newFrame.id = 'ai-frame';
-        newFrame.setAttribute('frameborder', '0');
-        newFrame.setAttribute('allow', 'microphone *; camera *; clipboard-write; clipboard-read; fullscreen; display-capture');
-        newFrame.src = targetUrl;
-
-        // Replace old iframe
-        if (frame && frame.parentNode) {
-            frame.parentNode.replaceChild(newFrame, frame);
-        } else {
-            frameContainer.prepend(newFrame);
-        }
-        frame = newFrame;
-
-        // Re-apply zoom to the new iframe
-        applyZoom(currentZoom);
-
-        if (targetUrl && targetUrl.includes('claude.ai')) {
-            showToast('⚠️ Voice mode is unavailable for Claude in OmniPanel.', 4000);
-        }
+    function setActiveButton(providerName) {
+        aiButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.provider === providerName);
+        });
     }
 
     function updateProvider(providerName) {
         sessionState.lastProvider = providerName;
+        setActiveButton(providerName);
         saveState();
-        restoreSession(providerName);
+        showProvider(providerName);
     }
 
     function handleSessionUpdate(url) {
         try {
-            const urlObj = new URL(url);
-            const hostname = urlObj.hostname;
-            
-            // Identify provider
+            const hostname = new URL(url).hostname;
             let provider = null;
             for (const [domain, name] of Object.entries(DOMAIN_TO_PROVIDER)) {
                 if (hostname.includes(domain)) {
@@ -148,18 +182,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (provider) {
-                const defaultUrl = getDefaultUrl(provider) || DEFAULT_URLS[provider];
-                
-                // Only save if URL is different from the default (user navigated somewhere specific)
-                // Skip saving auth/redirect pages
-                if (url !== defaultUrl && 
-                    !url.includes('accounts.google.com') && 
+                const defaultUrl = DEFAULT_URLS[provider];
+                if (url !== defaultUrl &&
+                    !url.includes('accounts.google.com') &&
                     !url.includes('/signin') &&
                     !url.includes('/login') &&
                     !url.includes('/auth')) {
                     sessionState.sessions[provider] = url;
                 } else {
-                    // If user is back at default, clear saved session so default loads next time
                     delete sessionState.sessions[provider];
                 }
 
@@ -167,13 +197,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     saveState();
                 }
             }
-        } catch (e) {
-            console.error('Invalid URL update:', e);
-        }
+        } catch (e) {}
     }
 
     function saveState() {
-        chrome.storage.local.set({ omniSessionState: sessionState });
+        chrome.storage.local.set({ [STORAGE_KEY]: sessionState });
     }
 
 
@@ -188,99 +216,4 @@ document.addEventListener('DOMContentLoaded', async () => {
             setTimeout(() => toast.classList.add('hidden'), 300);
         }, duration);
     }
-
-
-    // --- Action Buttons (Copy, Screenshot, Mic) ---
-
-    async function getActiveTab() {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        return tab;
-    }
-
-    btnUrl.addEventListener('click', async () => {
-        try {
-            const tab = await getActiveTab();
-            if (tab?.url) {
-                await navigator.clipboard.writeText(tab.url);
-                showToast('Link Copied');
-            } else {
-                showToast('No Active Tab');
-            }
-        } catch (err) {
-            showToast('Failed to Copy');
-        }
-    });
-
-    btnScreenshot.addEventListener('click', async () => {
-        try {
-            const tab = await getActiveTab();
-            if (!tab) return showToast('No Active Tab');
-            
-            const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
-            const res = await fetch(dataUrl);
-            const blob = await res.blob();
-            await navigator.clipboard.write([ new ClipboardItem({ [blob.type]: blob }) ]);
-            showToast('Screenshot Copied');
-        } catch (err) {
-            showToast('Screenshot Failed');
-        }
-    });
-
-    // Mic Permission
-    async function checkMicPermission() {
-        try {
-            const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
-            
-            const updateMicBtn = (state) => {
-                btnMic.style.display = (state === 'granted') ? 'none' : 'flex';
-            };
-
-            updateMicBtn(permissionStatus.state);
-            permissionStatus.onchange = () => updateMicBtn(permissionStatus.state);
-        } catch (err) {
-            btnMic.style.display = 'flex';
-        }
-    }
-
-    btnMic.addEventListener('click', () => {
-        chrome.tabs.create({ url: 'permission.html' });
-    });
-
-    checkMicPermission();
-
-
-    // --- Zoom Controls ---
-
-    const btnZoomIn = document.getElementById('zoom-in');
-    const btnZoomOut = document.getElementById('zoom-out');
-
-    function zoomIn() {
-        applyZoom(currentZoom + ZOOM_STEP);
-        showToast(`Zoom ${Math.round(currentZoom * 100)}%`);
-    }
-
-    function zoomOut() {
-        applyZoom(currentZoom - ZOOM_STEP);
-        showToast(`Zoom ${Math.round(currentZoom * 100)}%`);
-    }
-
-    btnZoomIn.addEventListener('click', zoomIn);
-    btnZoomOut.addEventListener('click', zoomOut);
-
-    // Keyboard shortcuts: Ctrl+= (zoom in), Ctrl+- (zoom out), Ctrl+0 (reset)
-    document.addEventListener('keydown', (e) => {
-        if (e.ctrlKey || e.metaKey) {
-            if (e.key === '=' || e.key === '+') {
-                e.preventDefault();
-                zoomIn();
-            } else if (e.key === '-') {
-                e.preventDefault();
-                zoomOut();
-            } else if (e.key === '0') {
-                e.preventDefault();
-                applyZoom(1.0);
-                showToast('Zoom Reset 100%');
-            }
-        }
-    });
 });
