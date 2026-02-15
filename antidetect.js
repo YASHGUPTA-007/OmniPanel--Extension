@@ -1,104 +1,9 @@
-// Run in MAIN world on Claude pages
-// Handles: frame detection bypass, sidebar visibility, voice mode limitations
+
 (function () {
     'use strict';
 
-    // === FRAME-BUSTING PREVENTION ===
-    // Claude may check if it's inside an iframe and refuse to render.
-    // Override window.top to make it think it's the top-level window.
-    try {
-        // Try to make Claude think it's not in an iframe
-        Object.defineProperty(window, 'frameElement', {
-            get: () => null,
-            configurable: true
-        });
-    } catch (e) {
-        // Some browsers protect frameElement
-    }
-
-    // Intercept any frame-busting attempts
-    // Claude might try: if (window.top !== window.self) location = ...
-    const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
-
-    // === VIEWPORT SPOOF ===
-    // Claude hides its sidebar on narrow viewports via JS checks (React hooks).
-    // Since this runs at document_start in MAIN world, it executes BEFORE Claude's
-    // React hydrates, tricking it into thinking the viewport is desktop-width.
-    const SPOOFED_WIDTH = 1400;
-
-    try {
-        Object.defineProperty(window, 'innerWidth', {
-            get: () => SPOOFED_WIDTH,
-            configurable: true
-        });
-        Object.defineProperty(document.documentElement, 'clientWidth', {
-            get: () => SPOOFED_WIDTH,
-            configurable: true
-        });
-
-        // Override matchMedia for JS-based responsive checks (e.g., useMediaQuery hooks)
-        const originalMatchMedia = window.matchMedia.bind(window);
-        window.matchMedia = function (query) {
-            // For max-width queries below our spoofed width, make them NOT match
-            let modified = query.replace(/\(max-width:\s*(\d+)px\)/g, (match, px) => {
-                return parseInt(px) < SPOOFED_WIDTH ? '(max-width: 0px)' : match;
-            });
-            // For min-width queries at or below our spoofed width, make them match
-            modified = modified.replace(/\(min-width:\s*(\d+)px\)/g, (match, px) => {
-                return parseInt(px) <= SPOOFED_WIDTH ? '(min-width: 0px)' : match;
-            });
-            return originalMatchMedia(modified);
-        };
-    } catch (e) {
-        // If overrides fail, continue gracefully
-    }
-
-    // === SIDEBAR CSS FIX ===
-    // Even with JS spoofing, CSS media queries still see the real viewport width.
-    // Inject a <style> tag to force the sidebar to render as a fixed overlay.
-    // IMPORTANT: Use specific Claude selectors, NOT generic "nav" or "aside" tags,
-    // because broad selectors can accidentally cover the entire chat interface.
-    function injectSidebarCSS() {
-        const style = document.createElement('style');
-        style.id = 'omni-claude-sidebar-fix';
-        style.textContent = `
-            /* Force Claude sidebar to show — using Claude-specific selectors only */
-            [data-testid*="sidebar"],
-            [data-testid*="nav-panel"],
-            [data-testid="menu-sidebar"],
-            div[class*="sidebar"],
-            div[class*="Sidebar"] {
-                position: fixed !important;
-                left: 0 !important;
-                top: 0 !important;
-                height: 100vh !important;
-                z-index: 99990 !important;
-                transform: translateX(0) !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-                overflow-y: auto !important;
-                max-width: 85vw !important;
-            }
-
-            /* When sidebar is hidden via toggle, slide it off-screen */
-            [data-testid*="sidebar"].omni-hidden,
-            div[class*="sidebar"].omni-hidden,
-            div[class*="Sidebar"].omni-hidden {
-                transform: translateX(-100%) !important;
-                transition: transform 0.2s ease !important;
-            }
-
-            [data-testid*="sidebar"]:not(.omni-hidden),
-            div[class*="sidebar"]:not(.omni-hidden),
-            div[class*="Sidebar"]:not(.omni-hidden) {
-                transition: transform 0.2s ease !important;
-            }
-        `;
-        (document.head || document.documentElement).appendChild(style);
-    }
-
     // === FLOATING RECENTS BUTTON ===
-    // As a reliable fallback, add a floating button to navigate to Claude's recent chats
+    // Add a floating button to navigate to Claude's recent chats
     function addRecentsButton() {
         if (document.getElementById('omni-recents-btn')) return;
 
@@ -137,14 +42,13 @@
         });
 
         btn.addEventListener('click', () => {
-            // Toggle sidebar if it exists, otherwise navigate to recents
+            // Try to find and toggle sidebar, otherwise go to recents
             const sidebar = document.querySelector('[data-testid*="sidebar"]') ||
                             document.querySelector('div[class*="sidebar"]') ||
                             document.querySelector('div[class*="Sidebar"]');
             if (sidebar) {
                 sidebar.classList.toggle('omni-hidden');
             } else {
-                // Fallback: navigate to recents page
                 window.location.href = '/recents';
             }
         });
@@ -236,9 +140,6 @@
 
     // === INITIALIZATION ===
 
-    // Inject CSS immediately (before page renders)
-    injectSidebarCSS();
-
     const observer = new MutationObserver(handleMutation);
 
     function startObserving() {
@@ -256,3 +157,4 @@
         document.addEventListener('DOMContentLoaded', startObserving);
     }
 })();
+ 
