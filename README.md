@@ -17,9 +17,6 @@
 
 <br>
 
-<p align="center">
-  <img src="image copy.png" alt="OmniPanel Screenshot" width="700" />
-</p>
 
 ---
 
